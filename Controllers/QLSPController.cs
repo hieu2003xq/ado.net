@@ -1,4 +1,5 @@
 ﻿using ado.net.Models;
+using Microsoft.Security.Application;
 using System;
 using System.Collections.Generic;
 using System.Data.SqlClient;
@@ -24,7 +25,7 @@ namespace ado.net.Controllers
             List<SP> lst=new List<SP>();
             while (reader.Read())
             {
-                string masp = reader["maSP"].ToString();
+                int masp = Convert.ToInt32(reader["maSP"]);
                 string tensp = reader["tenSP"].ToString();
                 string giaban = reader["giaBan"].ToString();
                 string hinhAnh = reader["hinhAnh"].ToString();
@@ -39,36 +40,44 @@ namespace ado.net.Controllers
             }
             return View(lst);
         }
-        public ActionResult themSP()
-        {
-            return View();
-        }
+       
+      
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public ActionResult themSP(int maSP,string tenSP,string giaBan,string hinhAnh)
+        [ValidateInput(false)]
+        public ActionResult themSP(SP data)
         {
-            string strCon = @"Data Source=WINDOWS-11\SQLEXPRESS;Initial Catalog=qlBh;Integrated Security=True";
-            var connection = new SqlConnection(strCon);
-            connection.Open();
-            SqlCommand cmd = new SqlCommand();
-            cmd.Connection = connection;
-            cmd.CommandType = System.Data.CommandType.Text;
-            string sql = "insert into sanPham (maSP,tenSP,giaBan,hinhAnh) values(@ma,@ten,@gia,@hinhAnh)";
-            cmd.CommandText = sql;
-            cmd.Parameters.Add("@ma", System.Data.SqlDbType.Int).Value = maSP;
-            cmd.Parameters.Add("@ten", System.Data.SqlDbType.NVarChar).Value = tenSP;
-            cmd.Parameters.Add("@gia", System.Data.SqlDbType.Money).Value = giaBan;
-            cmd.Parameters.Add("@hinhAnh", System.Data.SqlDbType.NVarChar).Value = hinhAnh;
-            int ret=cmd.ExecuteNonQuery();
-            if(ret>0)
+            var a = Sanitizer.GetSafeHtmlFragment(data.tenSP);
+            if (!string.IsNullOrEmpty(a))
             {
-                MessageBox.Show("them thang cong");
-            }
-            else
-            {
-                MessageBox.Show("them khong thang cong");
-            }
-            return RedirectToAction("Index","QLSP");
+                string strCon = @"Data Source=WINDOWS-11\SQLEXPRESS;Initial Catalog=qlBh;Integrated Security=True";
+                var connection = new SqlConnection(strCon);
+                connection.Open();
+                SqlCommand cmd = new SqlCommand();
+                cmd.Connection = connection;
+                cmd.CommandType = System.Data.CommandType.Text;
+                string sql = "insert into sanPham (maSP,tenSP,giaBan,hinhAnh) values(@ma,@ten,@gia,@hinhAnh)";
+                cmd.CommandText = sql;
+                try
+                {
+                    cmd.Parameters.Add("@ma", System.Data.SqlDbType.Int).Value = data.maSP;
+                    cmd.Parameters.Add("@ten", System.Data.SqlDbType.NVarChar).Value = data.tenSP;
+                    cmd.Parameters.Add("@gia", System.Data.SqlDbType.Money).Value = data.giaBan;
+                    cmd.Parameters.Add("@hinhANh", System.Data.SqlDbType.NVarChar).Value = "0";
+
+                    int ret = cmd.ExecuteNonQuery();
+                    
+
+                    return Json(new { success = true });
+                }
+                catch(Exception ex)
+                {
+                    Console.WriteLine(ex.ToString());
+                    return Json(new { success = false });
+                }
+                
+            }return RedirectToAction("Index");
+           
         }
         public ActionResult xoa(int id)
         {
@@ -90,7 +99,7 @@ namespace ado.net.Controllers
             {
                 MessageBox.Show("xoa khong thang cong");
             }
-            return RedirectToAction("Index", "QLSP");
+            return RedirectToAction("thu", "QLSP");
         }
         [HttpGet]
         public ActionResult sua(int id)
@@ -105,7 +114,7 @@ namespace ado.net.Controllers
             var reader = cmd.ExecuteReader();
             if(reader.Read())
             {
-                string masp = reader["maSP"].ToString();
+                int masp = Convert.ToInt32(reader["maSP"]);
                 string tensp = reader["tenSP"].ToString();
                 string giaban = reader["giaBan"].ToString();
                 string hinhAnh = reader["hinhAnh"].ToString();
@@ -146,6 +155,84 @@ namespace ado.net.Controllers
                 MessageBox.Show("sua khong thang cong");
             }
             return RedirectToAction("Index", "QLSP");
+        }
+        [HttpPost]
+        public ActionResult getList()
+        {
+            int start = Convert.ToInt32(Request["start"]);
+            int length = Convert.ToInt32(Request["length"]);
+            string searchValue = Request["search[value]"];
+            string strCon = @"Data Source=WINDOWS-11\SQLEXPRESS;Initial Catalog=qlBh;Integrated Security=True";
+            var connection = new SqlConnection(strCon);
+            connection.Open();
+            SqlCommand cmd = new SqlCommand();
+            cmd.Connection = connection;
+            cmd.CommandText = @"select*from sanPham";
+            var reader = cmd.ExecuteReader();
+            List<SP> lst = new List<SP>();
+            while (reader.Read())
+            {
+                int masp = Convert.ToInt32(reader["maSP"]);
+                string tensp = reader["tenSP"].ToString();
+                string giaban = reader["giaBan"].ToString();
+                string hinhAnh = reader["hinhAnh"].ToString();
+                SP a = new SP()
+                {
+                    maSP = masp,
+                    tenSP = tensp,
+                    giaBan = giaban,
+                    hinhAnh = hinhAnh,
+                };
+                lst.Add(a);
+            }
+            reader.Close();
+           
+            int recordsTotals = lst.Count;
+           
+            if (!string.IsNullOrEmpty(searchValue))
+            {
+                lst=lst.Where(m => m.tenSP.ToLower().Contains(searchValue)).ToList();
+            }
+            int totalrowsafterfiltering =lst.Count;
+            var sql = @"SELECT TOP (@length) [maSP],[tenSP],[giaBan],[hinhAnh]FROM [qlBh].[dbo].[sanPham] where maSP>@start";
+            cmd.CommandText= sql;
+            cmd.Parameters.Add("@length", System.Data.SqlDbType.Int).Value = length;
+            cmd.Parameters.Add("@start", System.Data.SqlDbType.Int).Value = start;
+            var red=cmd.ExecuteReader();
+            List<SP> dsSP = new List<SP>();
+            while (red.Read())
+            {
+                int masp = Convert.ToInt32(red["maSP"]);
+                string tensp = red["tenSP"].ToString();
+                string giaban = red["giaBan"].ToString();
+                string hinhAnh = red["hinhAnh"].ToString();
+                SP a = new SP()
+                {
+                    maSP = masp,
+                    tenSP = tensp,
+                    giaBan = giaban,
+                    hinhAnh = hinhAnh,
+                };
+                dsSP.Add(a);
+            }
+            connection.Close(); 
+             lst = lst.Skip(start).Take(length).ToList(); 
+            return Json(new { data =lst , draw = Request["draw"], recordsTotals = recordsTotals, recordsFiltered = totalrowsafterfiltering }, JsonRequestBehavior.AllowGet);
+
+        }
+        public ActionResult test() {
+            
+            return View();
+
+        }
+        public ActionResult thu()
+        {
+            
+            return View();
+        }
+        public ActionResult check()
+        {
+            return View();
         }
     }
 }

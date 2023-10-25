@@ -34,6 +34,7 @@ namespace ado.net.Controllers
             SqlDataReader reader = cmd.ExecuteReader();
             if (reader.Read())
             {
+                Session["ad"] = user;
                 return RedirectToAction("Index","QLSP");
             }
             
